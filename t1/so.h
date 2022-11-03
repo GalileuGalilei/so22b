@@ -23,6 +23,13 @@ typedef enum {
 #include "err.h"
 #include <stdbool.h>
 
+typedef enum
+{
+  execucao,
+  pronto,
+  bloqueado
+} processo_estado;
+
 so_t *so_cria(contr_t *contr);
 
 void so_destroi(so_t *self);

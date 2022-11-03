@@ -6,7 +6,31 @@ struct so_t {
   contr_t *contr;       // o controlador do hardware
   bool paniquei;        // apareceu alguma situação intratável
   cpu_estado_t *cpue;   // cópia do estado da CPU
+  processo* tabela_processos;
 };
+
+//t1 - processos
+#pragma region PROCESSOS
+
+struct processo 
+{
+  cpu_estado_t *cpue;
+  processo_estado estado;
+  int* mem_copia;
+  int mem_copia_tam;
+
+};
+
+typedef struct processo processo;
+
+void salva_mem(so_t* self)
+{
+
+}
+
+#pragma endregion
+
+
 
 // funções auxiliares
 static void init_mem(so_t *self);
