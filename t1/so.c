@@ -1,35 +1,123 @@
 #include "so.h"
 #include "tela.h"
+#include "processo.h"
 #include <stdlib.h>
 
 struct so_t {
   contr_t *contr;       // o controlador do hardware
   bool paniquei;        // apareceu alguma situação intratável
   cpu_estado_t *cpue;   // cópia do estado da CPU
-  processo* tabela_processos;
+  tabela_processos* tabela;
 };
+
+/*
+* tu parou aqui: fez um tratamento pro tik-tok
+* e eu acho que só ^_0   .
+*/
 
 //t1 - processos
-#pragma region PROCESSOS
-
-struct processo 
+void carrega_mem(so_t* self, int* mem_copia, int tam_copia)
 {
-  cpu_estado_t *cpue;
-  processo_estado estado;
-  int* mem_copia;
-  int mem_copia_tam;
-
-};
-
-typedef struct processo processo;
-
-void salva_mem(so_t* self)
-{
-
+  contr_t* contr = self->contr;
+  mem_t* mem = contr_mem(contr);
+  int valor;
+  t_printf("carregando %i", tam_copia);
+  for(int i = 0; i < tam_copia; i++)
+  {
+    valor = mem_copia[i];
+    mem_escreve(mem, i, valor);
+  }
 }
 
-#pragma endregion
+void carrega_pronto(so_t* self)
+{
+  processo* pross = pross_acha_pronto(self->tabela);
 
+  if(pross == NULL)
+  {
+    t_printf("nada para executar, modo zumbi");
+    cpu_estado_t* aux = cpue_cria();
+    cpue_muda_modo(self->cpue, zumbi);
+    exec_altera_estado(contr_exec(self->contr), self->cpue);
+    return;
+  }
+
+  cpue_muda_modo(self->cpue, usuario);
+  pross_altera_estado(self->tabela, pross, execucao);
+  cpue_copia(pross_cpue(pross), self->cpue);
+
+  int tam = mem_tam(contr_mem(self->contr));
+  carrega_mem(self, pross_copia_memoria(pross), tam);
+}
+
+void salva_mem(so_t* self, int* mem_copia)
+{
+  contr_t* contr = self->contr;
+  mem_t* mem = contr_mem(contr);
+  int tam = mem_tam(mem);
+  int valor;
+
+  for(int i = 0; i < tam; i++)
+  {
+    mem_le(mem, i, &valor);
+    mem_copia[i] = valor;
+  }
+}
+
+void carrega_programa(so_t* self, int program)
+{
+    if(program == 0)
+    {
+      int progr[] = { 
+        #include "init.maq" 
+        };
+      carrega_mem(self, progr, sizeof(progr));
+      return;
+    }
+
+    if(program == 1)
+    {
+      int progr[] = { 
+        #include "p1.maq" 
+        };
+      carrega_mem(self, progr, sizeof(progr));
+      return;
+    }
+
+    if(program == 2)
+    {
+      int progr[] = { 
+        #include "p2.maq" 
+        };
+      carrega_mem(self, progr, sizeof(progr));
+      return;
+    }
+}
+
+// chamada de sistema para criação de processo
+static void so_trata_sisop_cria(so_t *self)
+{
+  processo* pross = pross_acha_exec(self->tabela);
+  contr_t* contr = self->contr;
+  exec_t* exec = contr_exec(contr);
+
+  if(pross != NULL)
+  {
+    pross_altera_estado(self->tabela, pross, pronto);
+    pross_copia_cpue(pross, self->cpue);
+    salva_mem(self, pross_copia_memoria(pross));
+  }
+
+  int programa = cpue_A(self->cpue);
+  carrega_programa(self, programa);
+
+  pross = pross_cria();
+  pross_insere(self->tabela, pross);
+  pross_altera_estado(self->tabela, pross, execucao);
+
+  cpue_copia(pross_cpue(pross), self->cpue);
+  exec_altera_estado(exec, pross_cpue(pross));
+}
 
 
 // funções auxiliares
@@ -43,6 +131,7 @@ so_t *so_cria(contr_t *contr)
   self->contr = contr;
   self->paniquei = false;
   self->cpue = cpue_cria();
+  self->tabela = pross_tabela_cria();
   init_mem(self);
   // coloca a CPU em modo usuário
   /*
@@ -73,14 +162,21 @@ static void so_trata_sisop_le(so_t *self)
   int val;
   err_t err = es_le(contr_es(self->contr), disp, &val);
   cpue_muda_A(self->cpue, err);
-  if (err == ERR_OK) {
+  if (err == ERR_OK) 
+  {
     cpue_muda_X(self->cpue, val);
   }
-  // incrementa o PC
+  else
+  {
+    processo* pross = pross_acha_exec(self->tabela);
+    salva_mem(self, pross_copia_memoria(pross));
+    pross_bloqueia(pross, SO_LE, disp);
+    carrega_pronto(self);
+  }
+
   cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
   // interrupção da cpu foi atendida
   cpue_muda_erro(self->cpue, ERR_OK, 0);
-  // altera o estado da CPU (deveria alterar o estado do processo)
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
@@ -90,34 +186,36 @@ static void so_trata_sisop_le(so_t *self)
 // retorna em A o código de erro
 static void so_trata_sisop_escr(so_t *self)
 {
-  // faz escrita assíncrona.
+  // faz leitura assíncrona.
   // deveria ser síncrono, verificar es_pronto() e bloquear o processo
   int disp = cpue_A(self->cpue);
-  int val = cpue_X(self->cpue);
+  int val;
   err_t err = es_escreve(contr_es(self->contr), disp, val);
   cpue_muda_A(self->cpue, err);
+  if (err == ERR_OK) 
+  {
+    cpue_muda_X(self->cpue, val);
+  }
+  else
+  {
+    processo* pross = pross_acha_exec(self->tabela);
+    salva_mem(self, pross_copia_memoria(pross));
+    pross_bloqueia(pross, SO_ESCR, disp);
+    carrega_pronto(self);
+  }
+
+  cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
   // interrupção da cpu foi atendida
   cpue_muda_erro(self->cpue, ERR_OK, 0);
-  // incrementa o PC
-  cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
-  // altera o estado da CPU (deveria alterar o estado do processo)
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
 // chamada de sistema para término do processo
 static void so_trata_sisop_fim(so_t *self)
 {
-  t_printf("SISOP FIM não implementado");
-  panico(self);
-  //...
-}
-
-// chamada de sistema para criação de processo
-static void so_trata_sisop_cria(so_t *self)
-{
-  t_printf("SISOP CRIA não implementado");
-  panico(self);
-  //...
+  processo* pross = pross_acha_exec(self->tabela);
+  pross_libera(self->tabela, pross);
+  carrega_pronto(self);
 }
 
 // trata uma interrupção de chamada de sistema
@@ -148,6 +246,7 @@ static void so_trata_sisop(so_t *self)
 // trata uma interrupção de tempo do relógio
 static void so_trata_tic(so_t *self)
 {
+  t_printf("tratar interrupção de relogio");
   // TODO: tratar a interrupção do relógio
 }
 
@@ -177,20 +276,9 @@ bool so_ok(so_t *self)
 // carrega um programa na memória
 static void init_mem(so_t *self)
 {
-  // programa para executar na nossa CPU
-  int progr[] = {
-  #include "p1.maq"
-  };
-  int tam_progr = sizeof(progr)/sizeof(progr[0]);
-
-  // inicializa a memória com o programa 
-  mem_t *mem = contr_mem(self->contr);
-  for (int i = 0; i < tam_progr; i++) {
-    if (mem_escreve(mem, i, progr[i]) != ERR_OK) {
-      t_printf("so.init_mem: erro de memória, endereco %d\n", i);
-      panico(self);
-    }
-  }
+  cpu_estado_t* cpue = self->cpue;
+  cpue_muda_A(cpue, 0);
+  so_trata_sisop_cria(self);
 }
   
 static void panico(so_t *self) 
