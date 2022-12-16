@@ -134,3 +134,26 @@ void pross_bloqueia(processo* pross, so_chamada_t motivo, int complemento)
   pross->motivo_bloqueio = motivo;
   pross->complemento = complemento;
 }
+
+void pross_desbloqueia(processo* pross)
+{
+    pross->estado = pronto;
+}
+
+processo* pross_acha_bloqueado(tabela_processos* tabela)
+{
+    for(processo* i = tabela->lista; i->next != NULL; i = i->next)
+    {
+        if(i->estado == bloqueado)
+        {
+            return i;
+        }
+    }
+
+    return NULL;
+}
+
+processo_estado pross_motivo_bloqueio(processo* pross)
+{
+    return pross->estado;
+}

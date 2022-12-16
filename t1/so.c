@@ -29,6 +29,16 @@ void carrega_mem(so_t* self, int* mem_copia, int tam_copia)
   }
 }
 
+void carrega_processo(so_t* self, processo* pross)
+{
+  cpue_muda_modo(self->cpue, usuario);
+  pross_altera_estado(self->tabela, pross, execucao);
+  cpue_copia(pross_cpue(pross), self->cpue);
+
+  int tam = mem_tam(contr_mem(self->contr));
+  carrega_mem(self, pross_copia_memoria(pross), tam);
+}
+
 void carrega_pronto(so_t* self)
 {
   processo* pross = pross_acha_pronto(self->tabela);
@@ -36,18 +46,12 @@ void carrega_pronto(so_t* self)
   if(pross == NULL)
   {
     t_printf("nada para executar, modo zumbi");
-    cpu_estado_t* aux = cpue_cria();
     cpue_muda_modo(self->cpue, zumbi);
     exec_altera_estado(contr_exec(self->contr), self->cpue);
     return;
   }
 
-  cpue_muda_modo(self->cpue, usuario);
-  pross_altera_estado(self->tabela, pross, execucao);
-  cpue_copia(pross_cpue(pross), self->cpue);
-
-  int tam = mem_tam(contr_mem(self->contr));
-  carrega_mem(self, pross_copia_memoria(pross), tam);
+  carrega_processo(self, pross);
 }
 
 void salva_mem(so_t* self, int* mem_copia)
@@ -154,7 +158,7 @@ void so_destroi(so_t *self)
 // recebe em A a identificação do dispositivo
 // retorna em X o valor lido
 //            A o código de erro
-static void so_trata_sisop_le(so_t *self)
+static bool so_trata_sisop_le(so_t *self)
 {
   // faz leitura assíncrona.
   // deveria ser síncrono, verificar es_pronto() e bloquear o processo
@@ -165,49 +169,31 @@ static void so_trata_sisop_le(so_t *self)
   if (err == ERR_OK) 
   {
     cpue_muda_X(self->cpue, val);
-  }
-  else
-  {
-    processo* pross = pross_acha_exec(self->tabela);
-    salva_mem(self, pross_copia_memoria(pross));
-    pross_bloqueia(pross, SO_LE, disp);
-    carrega_pronto(self);
+    return true;
   }
 
-  cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
-  // interrupção da cpu foi atendida
-  cpue_muda_erro(self->cpue, ERR_OK, 0);
-  exec_altera_estado(contr_exec(self->contr), self->cpue);
+  return false;
 }
 
 // chamada de sistema para escrita de E/S
 // recebe em A a identificação do dispositivo
 //           X o valor a ser escrito
 // retorna em A o código de erro
-static void so_trata_sisop_escr(so_t *self)
+static bool so_trata_sisop_escr(so_t *self)
 {
   // faz leitura assíncrona.
   // deveria ser síncrono, verificar es_pronto() e bloquear o processo
   int disp = cpue_A(self->cpue);
-  int val;
+  int val = cpue_X(self->cpue);
   err_t err = es_escreve(contr_es(self->contr), disp, val);
   cpue_muda_A(self->cpue, err);
   if (err == ERR_OK) 
   {
     cpue_muda_X(self->cpue, val);
-  }
-  else
-  {
-    processo* pross = pross_acha_exec(self->tabela);
-    salva_mem(self, pross_copia_memoria(pross));
-    pross_bloqueia(pross, SO_ESCR, disp);
-    carrega_pronto(self);
+    return true;
   }
 
-  cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
-  // interrupção da cpu foi atendida
-  cpue_muda_erro(self->cpue, ERR_OK, 0);
-  exec_altera_estado(contr_exec(self->contr), self->cpue);
+  return false;
 }
 
 // chamada de sistema para término do processo
@@ -224,30 +210,86 @@ static void so_trata_sisop(so_t *self)
   // o tipo de chamada está no "complemento" do cpue
   exec_copia_estado(contr_exec(self->contr), self->cpue);
   so_chamada_t chamada = cpue_complemento(self->cpue);
+  bool n_bloqueia = false;
   switch (chamada) {
     case SO_LE:
-      so_trata_sisop_le(self);
+      n_bloqueia = so_trata_sisop_le(self);
       break;
     case SO_ESCR:
-      so_trata_sisop_escr(self);
+      n_bloqueia = so_trata_sisop_escr(self);
       break;
     case SO_FIM:
       so_trata_sisop_fim(self);
-      break;
+      return;
     case SO_CRIA:
       so_trata_sisop_cria(self);
-      break;
+      return;
     default:
       t_printf("so: chamada de sistema não reconhecida %d\n", chamada);
       panico(self);
   }
+
+  if(!n_bloqueia)
+  {
+    t_printf("bloqueando processo");
+
+    int disp = cpue_A(self->cpue);
+    processo* pross = pross_acha_exec(self->tabela);
+
+    salva_mem(self, pross_copia_memoria(pross));
+    pross_bloqueia(pross, chamada, disp);
+    carrega_pronto(self);
+  }
+  
+
+  cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
+  // interrupção da cpu foi atendida
+  cpue_muda_erro(self->cpue, ERR_OK, 0);
+  exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
 // trata uma interrupção de tempo do relógio
 static void so_trata_tic(so_t *self)
 {
-  t_printf("tratar interrupção de relogio");
-  // TODO: tratar a interrupção do relógio
+    processo* pross = pross_acha_bloqueado(self->tabela);
+    t_printf("chamada de relógio");
+
+    if(pross == NULL)
+    {
+      return;
+    }
+
+    cpue_copia(pross_cpue(pross), self->cpue);
+    so_chamada_t motivo = pross_motivo_bloqueio(pross);
+    bool debug = false;
+
+    switch (motivo)
+    {
+    case SO_LE:
+      debug = so_trata_sisop_le(self);
+      break;
+    
+    case SO_ESCR:
+      debug = so_trata_sisop_escr(self);
+      break;
+    
+    default:
+      t_printf("algo de muito errado não está certo");
+      break;
+    }
+
+    if(debug)
+    {
+      t_printf("um processo foi desbloqueado");
+      pross_altera_estado(self->tabela, pross, pronto);
+    }
+    else
+    {
+      t_printf("não foi possível desbloquear nenhum processo");
+    }
+    
+
+    carrega_pronto(self);
 }
 
 // houve uma interrupção do tipo err — trate-a

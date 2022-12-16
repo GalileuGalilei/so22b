@@ -44,4 +44,10 @@ processo* pross_acha_pronto(tabela_processos* tabela);
 /// @brief bloqueia o último processo que estava em execução
 void pross_bloqueia(processo* pross, so_chamada_t motivo, int complemento);
 
+void pross_desbloqueia(processo* pross);
+
+processo* pross_acha_bloqueado(tabela_processos* tabela);
+
+processo_estado pross_motivo_bloqueio(processo* pross);
+
 #endif
