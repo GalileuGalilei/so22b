@@ -86,7 +86,7 @@ processo* pross_acha_exec(tabela_processos* tabela)
 
 processo* pross_acha_pronto(tabela_processos* tabela)
 {
-  for(processo* i = tabela->lista; i->next != NULL; i = i->next)
+  for(processo* i = tabela->lista; i != NULL; i = i->next)
   {
     if(i->estado == pronto)
     {
@@ -142,7 +142,7 @@ void pross_desbloqueia(processo* pross)
 
 processo* pross_acha_bloqueado(tabela_processos* tabela)
 {
-    for(processo* i = tabela->lista; i->next != NULL; i = i->next)
+    for(processo* i = tabela->lista; i != NULL; i = i->next)
     {
         if(i->estado == bloqueado)
         {
@@ -155,5 +155,5 @@ processo* pross_acha_bloqueado(tabela_processos* tabela)
 
 processo_estado pross_motivo_bloqueio(processo* pross)
 {
-    return pross->estado;
+    return pross->motivo_bloqueio;
 }
