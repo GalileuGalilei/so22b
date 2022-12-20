@@ -338,7 +338,6 @@ err_t exec_executa_1(exec_t *self)
   // não executa se CPU estiver em estado zumbi
   if (cpue_modo(self->estado) == zumbi) 
   {
-    t_printf("project zomboid");
     return ERR_OK;
   }
   // não executa se CPU já estiver em erro

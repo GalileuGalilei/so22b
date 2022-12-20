@@ -10,18 +10,13 @@ struct so_t {
   tabela_processos* tabela;
 };
 
-/*
-* tu parou aqui: fez um tratamento pro tik-tok
-* e eu acho que só ^_0   .
-*/
-
 //t1 - processos
 void carrega_mem(so_t* self, int* mem_copia, int tam_copia)
 {
   contr_t* contr = self->contr;
   mem_t* mem = contr_mem(contr);
   int valor;
-  t_printf("carregando %i", tam_copia);
+  t_printf("DEBUG: carregando %i", tam_copia);
   for(int i = 0; i < tam_copia; i++)
   {
     valor = mem_copia[i];
@@ -39,22 +34,24 @@ void carrega_processo(so_t* self, processo* pross)
   carrega_mem(self, pross_copia_memoria(pross), tam);
 }
 
+//um embrião de escalonador
 void carrega_pronto(so_t* self)
 {
   processo* pross = pross_acha_pronto(self->tabela);
 
   if(pross == NULL)
   {
-    t_printf("nada para executar, modo zumbi");
+    t_printf("DEBUG: modo zumbi");
     cpue_muda_modo(self->cpue, zumbi);
     exec_altera_estado(contr_exec(self->contr), self->cpue);
     return;
   }
   cpue_muda_modo(self->cpue, usuario);
-  exec_altera_estado(contr_exec(self->contr), self->cpue);
   carrega_processo(self, pross);
+  exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
+//copia a memoria para dentro de um ponteiro "mem_copia"
 void salva_mem(so_t* self, int* mem_copia)
 {
   contr_t* contr = self->contr;
@@ -167,13 +164,14 @@ static void so_trata_sisop_le(so_t *self)
   int val;
   err_t err = es_le(contr_es(self->contr), disp, &val);
 
-  if(!es_pronto(contr_es(self->contr), disp, leitura) || err != ERR_OK)
+  //contr_es(self->contr), disp, leitura) -> n implementado
+  if(err != ERR_OK)
   {
     processo* pross = pross_acha_exec(self->tabela);
 
-    pross_copia_cpue(pross, self->cpue);
     salva_mem(self, pross_copia_memoria(pross));
     pross_bloqueia(pross, SO_LE, disp);
+    pross_copia_cpue(pross, self->cpue);
     carrega_pronto(self);
   }
   else
@@ -200,14 +198,14 @@ static void so_trata_sisop_escr(so_t *self)
   int disp = cpue_A(self->cpue);
   int val = cpue_X(self->cpue);
   err_t err = es_escreve(contr_es(self->contr), disp, val);
-
-  if(!es_pronto(contr_es(self->contr), disp, escrita) || err != ERR_OK)
+  //!es_pronto(contr_es(self->contr), disp, escrita) -> n implementado
+  if(err != ERR_OK)
   {
     processo* pross = pross_acha_exec(self->tabela);
 
-    pross_copia_cpue(pross, self->cpue);
     salva_mem(self, pross_copia_memoria(pross));
     pross_bloqueia(pross, SO_ESCR, disp);
+    pross_copia_cpue(pross, self->cpue);
     carrega_pronto(self);
   }
   else
@@ -224,6 +222,7 @@ static void so_trata_sisop_escr(so_t *self)
 // chamada de sistema para término do processo
 static void so_trata_sisop_fim(so_t *self)
 {
+  t_printf("DEBUG: terminando processo");
   processo* pross = pross_acha_exec(self->tabela);
   pross_libera(self->tabela, pross);
   carrega_pronto(self);
@@ -290,13 +289,13 @@ bool desbloqueia_so_escr(so_t* self, cpu_estado_t* cpue)
 // trata uma interrupção de tempo do relógio
 static void so_trata_tic(so_t *self)
 {
-    t_printf("chamada de relógio");
+    t_printf("DEBUG: chamada de relogio");
     processo* pross = pross_acha_exec(self->tabela);
 
     if(pross != NULL)
     {
       pross_altera_estado(self->tabela, pross, pronto);
-      pross_copia_cpue(pross, self->cpue);
+      exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
       salva_mem(self, pross_copia_memoria(pross));
     }
     
@@ -304,13 +303,13 @@ static void so_trata_tic(so_t *self)
 
     if(pross == NULL)
     {
+      carrega_pronto(self);
       return;
     }
-    cpue_copia(pross_cpue(pross), self->cpue);
 
+    cpue_copia(pross_cpue(pross), self->cpue); //tirar depois
     so_chamada_t motivo = pross_motivo_bloqueio(pross);
     cpu_estado_t* cpue = pross_cpue(pross);
-    t_printf("dispositivo: %i", cpue_A(cpue));
     bool debug = false;
 
     switch (motivo)
@@ -332,7 +331,7 @@ static void so_trata_tic(so_t *self)
     {
       pross_altera_estado(self->tabela, pross, pronto);
       cpue_muda_PC(cpue, cpue_PC(cpue) + 2);
-      t_printf("um processo foi desbloqueado");
+      t_printf("DEBUG: processo bloqueado");
     }
 
     carrega_pronto(self);
@@ -363,7 +362,6 @@ bool so_ok(so_t *self)
 {
   return !self->paniquei;
 }
-
 
 // carrega um programa na memória
 static void init_mem(so_t *self)
