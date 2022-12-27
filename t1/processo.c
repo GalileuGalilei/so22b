@@ -84,7 +84,7 @@ processo* pross_acha_exec(tabela_processos* tabela)
     return tabela->exec;
 }
 
-processo* pross_acha_pronto(tabela_processos* tabela)
+processo* pross_escalonador(tabela_processos* tabela)
 {
   for(processo* i = tabela->lista; i != NULL; i = i->next)
   {
