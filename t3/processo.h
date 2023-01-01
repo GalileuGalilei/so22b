@@ -17,9 +17,11 @@ typedef enum
 
 tabela_processos* pross_tabela_cria(so_metricas* metricas);
 
-processo* pross_cria(int programa);
+processo* pross_cria(int programa, tab_pag_t* tab_pags);
 
 void pross_insere(tabela_processos* tabela, processo* pross);
+
+void pross_usa_tabela(mmu_t* mmu, processo* pross);
 
 void pross_libera(tabela_processos* tabela, processo* pross);
 
@@ -39,7 +41,6 @@ cpu_estado_t* pross_cpue(processo* pross);
 /// @return processo em execução
 processo* pross_acha_exec(tabela_processos* tabela);
 
-/// @brief futuro escalonador
 processo* pross_escalonador(tabela_processos* tabela);
 
 /// @brief bloqueia o último processo que estava em execução

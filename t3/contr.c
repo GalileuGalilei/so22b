@@ -42,7 +42,7 @@ contr_t *contr_cria(void)
   self->mmu = mmu_cria(self->mem);
   // cria dispositivos de E/S (o relógio e um terminal)
   self->term = term_cria();
-  self->rel = rel_cria(0);
+  self->rel = rel_cria(8);
   t_inicio();
   // cria o controlador de E/S e registra os dispositivos
   self->es = es_cria();

@@ -4,8 +4,8 @@
 #include "so.h"
 #include "tela.h"
 
-#define QUANTUM 4 //4 - pequeno; 32 - grande
-#define ESCALONADOR 1 //"round-robin" = 0; "processo mais curto" = 1 
+#define QUANTUM 32 //4 - pequeno; 32 - grande
+#define ESCALONADOR 0 //"round-robin" = 0; "processo mais curto" = 1 
 
 typedef struct pross_metricas
 {
@@ -31,11 +31,12 @@ struct processo
   cpu_estado_t *cpue;
   processo_estado estado;
   so_chamada_t motivo_bloqueio;
-  int complemento; //complemento do motivo do bloqueio
-  int* mem_copia; //vai continuar aqui para quando faltar memória principal
+  int complemento; //complemento do motivo do bloqueio(por enquanto não serve pra nada)
+  int* mem_copia; //no futuro, será usada para simular a memória secundária
   pross_metricas* metricas;
+  tab_pag_t* tab_pags;
 
-  int id;
+  int id; //num tenho certeza se vou usar isso
   int n_programa;
   struct processo* next;
 };
@@ -84,6 +85,20 @@ pross_metricas* pross_metricas_cria()
     return self;
 }
 
+processo* pross_cria(int programa, tab_pag_t* tab_pags)
+{
+  processo* pross = (processo*)malloc(sizeof(processo));
+  pross->cpue = cpue_cria();
+  pross->mem_copia = (int*)malloc(MEM_TAM * sizeof(int));
+  pross->metricas = pross_metricas_cria();
+  pross->tab_pags = tab_pags;
+  pross->estado = 0; //estado inválido
+  pross->next = NULL;
+  pross->n_programa = programa;
+
+  return pross;
+}
+
 //insere um processo no inicio da fila
 void pross_insere(tabela_processos* tabela, processo* pross)
 {
@@ -100,6 +115,11 @@ void pross_insere(tabela_processos* tabela, processo* pross)
     }
 
     tabela->first = pross;
+}
+
+void pross_usa_tabela(mmu_t* mmu, processo* pross)
+{
+    mmu_usa_tab_pag(mmu, pross->tab_pags);
 }
 
 //escreve as metricas de um processo em um arquivo .txt
@@ -145,6 +165,7 @@ void so_log_metricas(so_metricas* i)
 void pross_libera(tabela_processos* tabela, processo* pross)
 {
     pross_log_metricas(pross);
+    tab_pag_destroi(pross->tab_pags);
     free(pross->mem_copia);
     free(pross->cpue);
     free(pross->metricas);
@@ -171,19 +192,6 @@ void pross_libera(tabela_processos* tabela, processo* pross)
 
     i->next = pross->next;
     free(pross);
-}
-
-processo* pross_cria(int programa)
-{
-  processo* pross = (processo*)malloc(sizeof(processo));
-  pross->cpue = cpue_cria();
-  pross->mem_copia = (int*)malloc(MEM_TAM * sizeof(int));
-  pross->metricas = pross_metricas_cria();
-  pross->estado = 0; //estado inválido
-  pross->next = NULL;
-  pross->n_programa = programa;
-
-  return pross;
 }
 
 //*****escalonadores*******
