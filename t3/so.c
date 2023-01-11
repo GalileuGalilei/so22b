@@ -30,7 +30,8 @@ void carrega_pagina(so_t* self, tab_pag_t* tab, int pag, int* data)
 }
 
 //cria uma nova tabela de páginas e carrega um programa para dentro dela
-tab_pag_t* carrega_tabela(so_t* self, int* programa, int tam)
+//não deve mais ser usada, as páginas devem ser carregas aos poucos por falhas
+tab_pag_t* carrega_tabela_x(so_t* self, int* programa, int tam)
 {
   int num_pag = (int)(tam / PAG_TAM + 1);
   int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
@@ -323,30 +324,9 @@ bool desbloqueia_so_escr(so_t* self, cpu_estado_t* cpue)
   return false;
 }
 
-// trata uma interrupção de tempo do relógio
-static void so_trata_tic(so_t *self)
+//tenta desbloquear um processo
+void desbloqueia_processo(so_t* self, processo* pross)
 {
-    t_printf("DEBUG: chamada de relogio");
-    processo* pross = pross_acha_exec(self->tabela);
-
-    if(pross != NULL)
-    {
-      pross_altera_estado(self->tabela, pross, pronto, self->relCount);
-      exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
-      //salva_mem(self, pross_copia_memoria(pross));
-    }
-
-    //se houver vários processos bloqueados, pode ser que um processo impeça que outro desbloqueie
-    pross = pross_acha_bloqueado(self->tabela);
-
-    if(pross == NULL)
-    {
-      carrega_pronto(self);
-      cpue_muda_erro(self->cpue, ERR_OK, 0);
-      exec_altera_estado(contr_exec(self->contr), self->cpue);
-      return;
-    }
-
     so_chamada_t motivo = pross_motivo_bloqueio(pross);
     cpu_estado_t* cpue = pross_cpue(pross);
     bool debug = false;
@@ -372,7 +352,33 @@ static void so_trata_tic(so_t *self)
       cpue_muda_PC(cpue, cpue_PC(cpue) + 2);
       t_printf("DEBUG: processo desbloqueado");
     }
+}
 
+// trata uma interrupção de tempo do relógio
+static void so_trata_tic(so_t *self)
+{
+    t_printf("DEBUG: chamada de relogio");
+    processo* pross = pross_acha_exec(self->tabela);
+
+    if(pross != NULL)
+    {
+      pross_altera_estado(self->tabela, pross, pronto, self->relCount);
+      exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
+      //salva_mem(self, pross_copia_memoria(pross));
+    }
+
+    //se houver vários processos bloqueados, pode ser que um processo impeça que outro desbloqueie
+    pross = pross_acha_bloqueado(self->tabela);
+
+    if(pross == NULL)
+    {
+      carrega_pronto(self);
+      cpue_muda_erro(self->cpue, ERR_OK, 0);
+      exec_altera_estado(contr_exec(self->contr), self->cpue);
+      return;
+    }
+
+    pross_desbloqueia_com_so(self->tabela, self, desbloqueia_processo);
     carrega_pronto(self);
 
     // interrupção da cpu foi atendida

@@ -46,6 +46,9 @@ processo* pross_escalonador(tabela_processos* tabela);
 /// @brief bloqueia o último processo que estava em execução
 void pross_bloqueia(tabela_processos* tabela, processo* pross, so_chamada_t motivo, int complemento, int relCount);
 
+//itera uma função de desbloqueio fornecida pelo so em todos os processos bloqueados da lista
+void pross_desbloqueia_com_so(tabela_processos* tabela, so_t* so, void (*fp)(processo*, so_t*));
+
 processo* pross_acha_bloqueado(tabela_processos* tabela);
 
 processo_estado pross_motivo_bloqueio(processo* pross);

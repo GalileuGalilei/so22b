@@ -3,28 +3,10 @@
 #include "processo.h"
 #include "so.h"
 #include "tela.h"
+#include "metricas.h"
 
 #define QUANTUM 32 //4 - pequeno; 32 - grande
 #define ESCALONADOR 0 //"round-robin" = 0; "processo mais curto" = 1 
-
-typedef struct pross_metricas
-{
-    int t_retorno; //tempo total do processo
-    int t_bloqueado;
-    int t_executando;
-    int t_pronto;
-    int t_retorno_media; //media do tempo que ficou bloqueado
-    int n_bloqueios;
-    int n_preempcoes;
-    int quantum;
-    int quantum_media;
-
-    //auxiliares
-    int n_execucao;
-    int last_exec;
-    int last_bloq;
-    int last_pron;
-} pross_metricas;
 
 struct processo 
 {
@@ -50,6 +32,14 @@ struct tabela_processos
     so_metricas* metricas; //metricas gerais do so
 };
 
+
+typedef struct ponteiro_pagina
+{
+    tab_pag_t* ptr;
+    int pagina;
+    struct ponteiro_pagina* next;
+}ponteiro_pagina;
+
 tabela_processos* pross_tabela_cria(so_metricas* metricas)
 {
     tabela_processos* tabela = (tabela_processos*)malloc(sizeof(tabela_processos));
@@ -65,32 +55,12 @@ tabela_processos* pross_tabela_cria(so_metricas* metricas)
     return tabela;
 }
 
-pross_metricas* pross_metricas_cria()
-{
-    pross_metricas* self = (pross_metricas*)malloc(sizeof(pross_metricas));
-    self->t_bloqueado = 0;
-    self->t_executando = 0;
-    self->n_bloqueios = 0;
-    self->n_preempcoes = 0;
-    self->t_pronto = 0;
-    self->t_retorno = 0;
-    self->t_retorno_media = 0;
-    self->quantum = 0;
-    self->quantum_media = QUANTUM; //escalonador do processo mais curto
-    self->last_bloq = 0;
-    self->last_exec = 0;
-    self->last_pron = 0;
-    self->n_execucao = 0;
-
-    return self;
-}
-
 processo* pross_cria(int programa, tab_pag_t* tab_pags)
 {
   processo* pross = (processo*)malloc(sizeof(processo));
   pross->cpue = cpue_cria();
   pross->mem_copia = (int*)malloc(MEM_TAM * sizeof(int));
-  pross->metricas = pross_metricas_cria();
+  pross->metricas = pross_metricas_cria(QUANTUM);
   pross->tab_pags = tab_pags;
   pross->estado = 0; //estado inválido
   pross->next = NULL;
@@ -122,49 +92,9 @@ void pross_usa_tabela(mmu_t* mmu, processo* pross)
     mmu_usa_tab_pag(mmu, pross->tab_pags);
 }
 
-//escreve as metricas de um processo em um arquivo .txt
-void pross_log_metricas(processo* pross)
-{
-    pross_metricas* i = pross->metricas;
-    FILE* fp = fopen("log.txt", "a");
-    feof(fp);
-
-    fprintf(fp,
-        "** programa: %i **\n"
-        "tempo de retorno: %i \n"
-        "tempo bloqueado: %i \n"
-        "tempo executando: %i \n"
-        "tempo pronto: %i \n"
-        "tempo medio de retorno: %i \n"
-        "numero de bloqueios: %i \n"
-        "numero de preempcoes: %i \n\n",
-
-        pross->n_programa, i->t_retorno, i->t_bloqueado,
-        i->t_executando, i->t_pronto, i->t_retorno_media,
-        i->n_bloqueios, i->n_preempcoes
-        );
-
-    fclose(fp);
-}
-
-void so_log_metricas(so_metricas* i)
-{
-    FILE* fp = fopen("log.txt", "a");
-    feof(fp);
-    fprintf(fp,
-        "** metricas gerais **\n"
-        "numero de chamadas de sistema: %i \n"
-        "tempo total: %i \n"
-        "tempo no modo zumbi: %i \n",
-        i->n_siop, i->t_total, i->t_zumbi
-        );
-
-    fclose(fp);
-}
-
 void pross_libera(tabela_processos* tabela, processo* pross)
 {
-    pross_log_metricas(pross);
+    pross_log_metricas(pross, pross->n_programa);
     tab_pag_destroi(pross->tab_pags);
     free(pross->mem_copia);
     free(pross->cpue);
@@ -194,7 +124,14 @@ void pross_libera(tabela_processos* tabela, processo* pross)
     free(pross);
 }
 
-//*****escalonadores*******
+//reseta o bit de escrita e acesso de todas as páginas
+void reseta_bit_pags()
+{
+    
+}
+//*****escalonadores*******]
+
+
 
 processo* round_robin(tabela_processos* tabela)
 {
@@ -207,7 +144,7 @@ processo* round_robin(tabela_processos* tabela)
             continue;
         }
 
-        if(i->metricas->quantum < QUANTUM)
+        if(pross_metricas_quantum(i) < QUANTUM)
         {
             return i;
         }
@@ -228,7 +165,7 @@ processo* round_robin(tabela_processos* tabela)
             i->next = NULL;
         }
 
-        i->metricas->quantum = 0;
+        pross_metricas_quantum_reseta(i);
     }
 
     return NULL;
@@ -250,7 +187,7 @@ processo* processo_mais_curto(tabela_processos* tabela)
             curto = i;
         }
 
-        if(i->metricas->quantum_media < curto->metricas->quantum_media)
+        if(pross_metricas_quantum_media(i) < pross_metricas_quantum_media(curto))
         {
             curto = i;
         }
@@ -291,67 +228,9 @@ processo* pross_escalonador(tabela_processos* tabela)
     return pross;
 }
 
-//essa função faz o teste para todas as métricas de um processo e as atualiza caso seja necessário
-void atualiza_metricas(processo* pross, processo_estado estado, int relCount)
-{
-    pross_metricas* metricas = pross->metricas;
-
-    //primeira chamada
-    if(pross->estado == 0 && estado != 0)
-    {
-        metricas->t_retorno = relCount;
-    }
-
-    //última chamada
-    if(estado == 0)
-    {
-        metricas->t_retorno = relCount - metricas->t_retorno;
-    }
-
-    if(estado == execucao)
-    {
-        metricas->last_exec = relCount;
-        metricas->n_execucao++;
-    }
-
-    if(pross->estado == execucao && estado != execucao)
-    {
-        metricas->quantum = relCount - metricas->last_exec;
-        metricas->t_executando += metricas->quantum;
-        metricas->quantum_media = (int)((float)metricas->t_executando / metricas->n_execucao);
-    }
-
-    if(pross->estado == execucao && estado == pronto)
-    {
-        metricas->n_preempcoes++;
-    }
-
-    if(estado == bloqueado)
-    {
-        metricas->n_bloqueios++;
-        metricas->last_bloq = relCount;
-    }
-
-    if(pross->estado == bloqueado && estado != bloqueado)
-    {
-        metricas->t_bloqueado += relCount - metricas->last_bloq;
-        metricas->t_retorno_media = (int)((float)metricas->t_bloqueado / metricas->n_bloqueios);
-    }
-
-    if(estado == pronto)
-    {
-        metricas->last_pron = relCount;
-    }
-
-    if(pross->estado == pronto && estado != pronto)
-    {
-        metricas->t_pronto += relCount - metricas->last_pron;
-    }
-}
-
 void pross_altera_estado(tabela_processos* tabela, processo* pross, processo_estado estado, int relCount)
 {
-    atualiza_metricas(pross, estado, relCount);
+    atualiza_metricas(pross->metricas ,pross->estado, estado, relCount);
 
     if(estado == execucao)
     {
@@ -385,6 +264,20 @@ void pross_bloqueia(tabela_processos* tabela, processo* pross, so_chamada_t moti
   pross_altera_estado(tabela, pross, bloqueado, relCount);
   pross->motivo_bloqueio = motivo;
   pross->complemento = complemento;
+}
+
+//itera uma função de desbloqueio fornecida pelo so em todos os processos bloqueados da lista
+void pross_desbloqueia_com_so(tabela_processos* tabela, so_t* so, void (*fp)(processo*, so_t*))
+{
+    for (processo* i = tabela->first; i != NULL; i = i->next)
+    {
+        if(i->estado != bloqueado)
+        {
+            continue;
+        }
+
+        fp(i, so);   
+    }
 }
 
 processo* pross_acha_bloqueado(tabela_processos* tabela)

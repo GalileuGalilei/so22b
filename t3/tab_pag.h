@@ -25,7 +25,7 @@ void tab_pag_destroi(tab_pag_t *self);
 //   caso a tradução não seja possível, retorna:
 //   ERR_FALPAG a tabela diz que a página é inválida
 //   ERR_PAGINV a tabela não contém a página
-err_t tab_pag_traduz(tab_pag_t *self, int end_v, int *end_f);
+err_t tab_pag_traduz(tab_pag_t *self, int end_v, int *end_f, bool escrita)
 
 // obtém informação sobre uma página da tabela
 bool tab_pag_valida(tab_pag_t *self, int pag);
