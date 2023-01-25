@@ -12,9 +12,9 @@ struct processo
 {
   cpu_estado_t *cpue;
   processo_estado estado;
-  so_chamada_t motivo_bloqueio;
+  pross_bloqueio motivo_bloqueio;
   int complemento; //complemento do motivo do bloqueio(por enquanto não serve pra nada)
-  int* mem_copia; //no futuro, será usada para simular a memória secundária
+  int* mem_copia; //no futuro, será usada para simular a memória secundária - o futuro chegou, bora!
   pross_metricas* metricas;
   tab_pag_t* tab_pags;
 
@@ -32,13 +32,18 @@ struct tabela_processos
     so_metricas* metricas; //metricas gerais do so
 };
 
-
 typedef struct ponteiro_pagina
 {
     tab_pag_t* ptr;
     int pagina;
     struct ponteiro_pagina* next;
 }ponteiro_pagina;
+
+typedef struct lista_paginas
+{
+    ponteiro_pagina* first;
+    ponteiro_pagina* last;
+} lista_paginas;
 
 tabela_processos* pross_tabela_cria(so_metricas* metricas)
 {
@@ -55,11 +60,11 @@ tabela_processos* pross_tabela_cria(so_metricas* metricas)
     return tabela;
 }
 
-processo* pross_cria(int programa, tab_pag_t* tab_pags)
+processo* pross_cria(int programa, tab_pag_t* tab_pags, int* mem_copia)
 {
   processo* pross = (processo*)malloc(sizeof(processo));
   pross->cpue = cpue_cria();
-  pross->mem_copia = (int*)malloc(MEM_TAM * sizeof(int));
+  pross->mem_copia = mem_copia;  //(int*)malloc(MEM_TAM * sizeof(int));
   pross->metricas = pross_metricas_cria(QUANTUM);
   pross->tab_pags = tab_pags;
   pross->estado = 0; //estado inválido
@@ -92,9 +97,23 @@ void pross_usa_tabela(mmu_t* mmu, processo* pross)
     mmu_usa_tab_pag(mmu, pross->tab_pags);
 }
 
+void pross_carrega_pagina(processo* pross, mem_t* mem, int pag, int quadro)
+{
+    tab_pag_muda_quadro(pross->tab_pags, pag, quadro);
+    tab_pag_muda_valida(pross->tab_pags, pag, true);
+    int end_real_pag = quadro * PAG_TAM;
+    int end_virt_pag = pag * PAG_TAM;
+
+    int j = end_virt_pag;
+    for(int i = end_real_pag; i < end_real_pag + PAG_TAM; i++, j++)
+    {
+        mem_escreve(mem, i, pross->mem_copia[j]);
+    }
+}
+
 void pross_libera(tabela_processos* tabela, processo* pross)
 {
-    pross_log_metricas(pross, pross->n_programa);
+    pross_log_metricas(pross->metricas, pross->n_programa);
     tab_pag_destroi(pross->tab_pags);
     free(pross->mem_copia);
     free(pross->cpue);
@@ -124,7 +143,7 @@ void pross_libera(tabela_processos* tabela, processo* pross)
     free(pross);
 }
 
-//reseta o bit de escrita e acesso de todas as páginas
+//reseta o bit de escrita e acesso de todas as páginas \\ pra qq eu ia usar isso mesmo?
 void reseta_bit_pags()
 {
     
@@ -144,7 +163,7 @@ processo* round_robin(tabela_processos* tabela)
             continue;
         }
 
-        if(pross_metricas_quantum(i) < QUANTUM)
+        if(pross_metricas_quantum(i->metricas) < QUANTUM)
         {
             return i;
         }
@@ -165,7 +184,7 @@ processo* round_robin(tabela_processos* tabela)
             i->next = NULL;
         }
 
-        pross_metricas_quantum_reseta(i);
+        pross_metricas_quantum_reseta(i->metricas);
     }
 
     return NULL;
@@ -187,7 +206,7 @@ processo* processo_mais_curto(tabela_processos* tabela)
             curto = i;
         }
 
-        if(pross_metricas_quantum_media(i) < pross_metricas_quantum_media(curto))
+        if(pross_metricas_quantum_media(i->metricas) < pross_metricas_quantum_media(curto->metricas))
         {
             curto = i;
         }
@@ -259,7 +278,7 @@ cpu_estado_t* pross_cpue(processo* pross)
     return pross->cpue;
 }
 
-void pross_bloqueia(tabela_processos* tabela, processo* pross, so_chamada_t motivo, int complemento, int relCount)
+void pross_bloqueia(tabela_processos* tabela, processo* pross, pross_bloqueio motivo, int complemento, int relCount)
 {
   pross_altera_estado(tabela, pross, bloqueado, relCount);
   pross->motivo_bloqueio = motivo;
@@ -267,7 +286,7 @@ void pross_bloqueia(tabela_processos* tabela, processo* pross, so_chamada_t moti
 }
 
 //itera uma função de desbloqueio fornecida pelo so em todos os processos bloqueados da lista
-void pross_desbloqueia_com_so(tabela_processos* tabela, so_t* so, void (*fp)(processo*, so_t*))
+void pross_desbloqueia_com_so(tabela_processos* tabela, so_t* so, void (*fp)(so_t*, processo*))
 {
     for (processo* i = tabela->first; i != NULL; i = i->next)
     {
@@ -276,7 +295,7 @@ void pross_desbloqueia_com_so(tabela_processos* tabela, so_t* so, void (*fp)(pro
             continue;
         }
 
-        fp(i, so);   
+        fp(so, i);   
     }
 }
 
@@ -293,7 +312,8 @@ processo* pross_acha_bloqueado(tabela_processos* tabela)
     return NULL;
 }
 
-processo_estado pross_motivo_bloqueio(processo* pross)
+pross_bloqueio pross_motivo_bloqueio(processo* pross, int* complemento)
 {
+    *complemento = pross->complemento;
     return pross->motivo_bloqueio;
 }

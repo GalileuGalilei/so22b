@@ -1,5 +1,5 @@
-#include "stdlib.h"
-#include "stdio.h"
+#include <stdlib.h>
+#include <stdio.h>
 #include "metricas.h"
 #include "processo.h"
 
@@ -142,7 +142,7 @@ int pross_metricas_quantum(pross_metricas* metricas)
     return metricas->quantum;
 }
 
-int pross_metricas_quantum_reseta(pross_metricas* metricas)
+void pross_metricas_quantum_reseta(pross_metricas* metricas)
 {
     metricas->quantum = 0;
 }

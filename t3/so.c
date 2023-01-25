@@ -1,9 +1,9 @@
+#include <stdlib.h>
+#include <stdio.h>
 #include "so.h"
 #include "tela.h"
 #include "rel.h"
 #include "processo.h"
-#include <stdlib.h>
-#define PAG_TAM 32 //num sei
 
 struct so_t {
   contr_t *contr;       // o controlador do hardware
@@ -15,47 +15,30 @@ struct so_t {
   char* quadros; //array de booleano que indica se um quadro está livre
 };
 
-//t1 - processos
 
-void carrega_pagina(so_t* self, tab_pag_t* tab, int pag, int* data)
-{
-  mmu_t* mmu = contr_mmu(self->contr);
-  mmu_usa_tab_pag(mmu, tab);
-  int end_virtual = pag * PAG_TAM;
-
-  for(int i = end_virtual; i < end_virtual + PAG_TAM; i++)
-  {
-    mmu_escreve(mmu, i, data[i - end_virtual]);
-  }
-}
-
-//cria uma nova tabela de páginas e carrega um programa para dentro dela
-//não deve mais ser usada, as páginas devem ser carregas aos poucos por falhas
-tab_pag_t* carrega_tabela_x(so_t* self, int* programa, int tam)
+//cria uma tabela nova tendo todas as paginas como inválidas
+tab_pag_t* cria_tabela(so_t* self, int tam)
 {
   int num_pag = (int)(tam / PAG_TAM + 1);
-  int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
+  //int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
   tab_pag_t* tab = tab_pag_cria(num_pag, PAG_TAM);
 
   int i;
-  int j;
-  for(i = 0, j = 0; i < num_quadros && j < num_pag; i++)
+  for(i = 0; i < num_pag; i++)
   {
-    //esse loop parte da assumição de que haverá quadros livres o suficiente
-    if(self->quadros[i] == 0)
-    {
-      tab_pag_muda_quadro(tab, j, i);
-      self->quadros[i] = 1;
-      j++;
-    }
+    //todas as páginas começam como inválidas
+    tab_pag_muda_valida(tab, i, false);
+
+    //self->quadros[i] = 1;
   }
 
-  t_printf("DEBUG: carregando programa de tam %i de %i paginas", tam, num_pag);
+  t_printf("DEBUG: criando tabela de tam %i de %i paginas", tam, num_pag);
+  /*
   for(int i = 0; i < num_pag; i++)
   {
     carrega_pagina(self, tab, i, programa + i * PAG_TAM);
   }
-
+  */
   return tab;
 }
 
@@ -113,34 +96,42 @@ void salva_memx(so_t* self, int* mem_copia)
   }
 }
 
-tab_pag_t* carrega_programa(so_t* self, int program)
+int* carrega_arquivo(const char* nome, int* tam)
 {
-    if(program == 0)
-    {
-      int progr[] = { 
-        #include "init.maq" 
-        };
-      return carrega_tabela(self, progr, sizeof(progr));
-    }
+  FILE* f = fopen(nome, "r");
+  fseek(f, 0, SEEK_END);
+  *tam = ftell(f) / sizeof(int) + 1;
+  t_printf(">>>>> %i", *tam);
+  rewind(f);
 
-    if(program == 1)
-    {
-      int progr[] = { 
-        #include "p1.maq" 
-        };
-      return carrega_tabela(self, progr, sizeof(progr));
-    }
+  int* vet = (int*)malloc(sizeof(int) * (*tam));
+  fread(vet, sizeof(int), *tam, f);
 
-    if(program == 2)
-    {
-      int progr[] = { 
-        #include "p2.maq" 
-        };
-      return carrega_tabela(self, progr, sizeof(progr));
-    }
+  for(int i = 0; i < *tam; i++)
+  {
+    t_printf("%i ", vet[i]);
+  }
 
-  t_printf("ERRO: tentativa de carregar um programa inexistente");
-  return NULL;
+  fclose(f);
+
+  return vet;
+}
+
+int* carrega_programa(int program, int* tam_prog)
+{
+  switch (program)
+  {
+  case 0:
+    return carrega_arquivo("init.maq", tam_prog);
+  case 1:
+    return carrega_arquivo("p1.maq", tam_prog);
+  case 2:
+    return carrega_arquivo("p2.maq", tam_prog);
+
+  default:
+    t_printf("ERRO: tentativa de carregar um programa inexistente");
+    return NULL;
+  }
 }
 
 // chamada de sistema para criação de processo
@@ -155,15 +146,18 @@ static void so_trata_sisop_cria(so_t *self)
     pross_altera_estado(self->tabela, pross, pronto, self->relCount);
     cpue_muda_PC(self->cpue, cpue_PC(self->cpue)+2);
     pross_copia_cpue(pross, self->cpue);
-    //salva_mem(self, pross_copia_memoria(pross));
   }
 
   int programa = cpue_A(self->cpue);
-  tab_pag_t* tab = carrega_programa(self, programa);
-  t_printf("programa %i", programa);
+  int tam_prog;
+  int* prog = carrega_programa(programa, &tam_prog);
+  tab_pag_t* tab = cria_tabela(self, tam_prog);
 
-  pross = pross_cria(programa, tab);
+  t_printf("programa %i de tamanho %i", programa, tam_prog);
+
+  pross = pross_cria(programa, tab, prog);
   pross_insere(self->tabela, pross);
+  pross_usa_tabela(contr_mmu(self->contr), pross);
   pross_altera_estado(self->tabela, pross, execucao, self->relCount);
 
   cpue_copia(pross_cpue(pross), self->cpue);
@@ -230,7 +224,7 @@ static void so_trata_sisop_le(so_t *self)
     processo* pross = pross_acha_exec(self->tabela);
 
     //salva_mem(self, pross_copia_memoria(pross));
-    pross_bloqueia(self->tabela, pross, SO_LE, disp, self->relCount);
+    pross_bloqueia(self->tabela, pross, pross_leitura, disp, self->relCount);
     pross_copia_cpue(pross, self->cpue);
     carrega_pronto(self);
   }
@@ -261,7 +255,7 @@ static void so_trata_sisop_escr(so_t *self)
     processo* pross = pross_acha_exec(self->tabela);
 
     //salva_mem(self, pross_copia_memoria(pross));
-    pross_bloqueia(self->tabela, pross, SO_ESCR, disp, self->relCount);
+    pross_bloqueia(self->tabela, pross, pross_escrita, disp, self->relCount);
     pross_copia_cpue(pross, self->cpue);
     carrega_pronto(self);
   }
@@ -274,7 +268,39 @@ static void so_trata_sisop_escr(so_t *self)
   // interrupção da cpu foi atendida
   cpue_muda_erro(self->cpue, ERR_OK, 0);
   exec_altera_estado(contr_exec(self->contr), self->cpue);
-  //só incrementa o PC, se não houver trocas de processos
+  //só incrementa o PC, se não houver trocas de processos ??? ?????
+}
+
+void so_trata_falha_pagina(so_t *self)
+{
+  mmu_t* mmu = contr_mmu(self->contr);
+  int pag = mmu_ultimo_endereco(mmu) / PAG_TAM;
+
+  processo* pross = pross_acha_exec(self->tabela);
+  pross_bloqueia(self->tabela, pross, pross_pagfalt, pag, self->relCount);
+  pross_copia_cpue(pross, self->cpue);
+
+  //todo: fazer o que o Benhas pediu
+  carrega_pronto(self);
+
+  cpue_muda_erro(self->cpue, ERR_OK, 0);
+  exec_altera_estado(contr_exec(self->contr), self->cpue);
+}
+
+//retornar um quadro livre da memória(descarta uma página existente se não houver)
+int escalonador_paginas(so_t* self)
+{
+  int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
+  for(int i = 0; i < num_quadros; i++)
+  {
+    if(self->quadros[i] == 0)
+    {
+      return i;
+    }
+  }
+
+  t_printf("falha no escalonador");
+  return -1;
 }
 
 // chamada de sistema para término do processo
@@ -324,29 +350,48 @@ bool desbloqueia_so_escr(so_t* self, cpu_estado_t* cpue)
   return false;
 }
 
+bool desbloqueia_so_falha_pag(so_t* self, processo* pross, int pag)
+{
+  mem_t* mem = contr_mem(self->contr);
+  cpu_estado_t* cpue = pross_cpue(pross);
+  int quadro = escalonador_paginas(self);
+  
+  pross_carrega_pagina(pross, mem, pag, quadro);
+
+  //volta no pc anterior para repetir o incremento da instrução
+  cpue_muda_PC(cpue, cpue_PC(cpue) - 2);
+  cpue_muda_A(cpue, ERR_OK);
+  return true;
+}
+
 //tenta desbloquear um processo
 void desbloqueia_processo(so_t* self, processo* pross)
 {
-    so_chamada_t motivo = pross_motivo_bloqueio(pross);
+    int complemento = 0;
+    pross_bloqueio motivo = pross_motivo_bloqueio(pross, &complemento);
     cpu_estado_t* cpue = pross_cpue(pross);
-    bool debug = false;
+    bool alterado = false;
 
     switch (motivo)
     {
-    case SO_LE:
-      debug = desbloqueia_so_le(self, cpue);
+    case pross_leitura:
+      alterado = desbloqueia_so_le(self, cpue);
       break;
     
-    case SO_ESCR:
-      debug = desbloqueia_so_escr(self, cpue);
+    case pross_escrita:
+      alterado = desbloqueia_so_escr(self, cpue);
       break;
     
+    case pross_pagfalt:
+      alterado = desbloqueia_so_falha_pag(self, pross, complemento);
+      break;
+
     default:
       t_printf("algo de muito errado não está certo");
       break;
     }
 
-    if(debug)
+    if(alterado)
     {
       pross_altera_estado(self->tabela, pross, pronto, self->relCount);
       cpue_muda_PC(cpue, cpue_PC(cpue) + 2);
@@ -364,10 +409,8 @@ static void so_trata_tic(so_t *self)
     {
       pross_altera_estado(self->tabela, pross, pronto, self->relCount);
       exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
-      //salva_mem(self, pross_copia_memoria(pross));
     }
 
-    //se houver vários processos bloqueados, pode ser que um processo impeça que outro desbloqueie
     pross = pross_acha_bloqueado(self->tabela);
 
     if(pross == NULL)
@@ -423,6 +466,13 @@ void so_int(so_t *self, err_t err)
       break;
     case ERR_TIC:
       so_trata_tic(self);
+      break;
+    case ERR_FALPAG:
+      so_trata_falha_pagina(self);
+      break;
+    case ERR_PAGINV:
+      t_printf("DEBUG: Tentativa de acesso ilegal a memoria");
+      self->paniquei = true;
       break;
     default:
       t_printf("SO: interrupção não tratada [%s]", err_nome(err));

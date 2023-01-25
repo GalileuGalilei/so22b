@@ -13,7 +13,7 @@ void so_log_metricas(so_metricas* i);
 
 int pross_metricas_quantum(pross_metricas* metricas);
 
-int pross_metricas_quantum_reseta(pross_metricas* metricas);
+void pross_metricas_quantum_reseta(pross_metricas* metricas);
 
 int pross_metricas_quantum_media(pross_metricas* metricas);
 
