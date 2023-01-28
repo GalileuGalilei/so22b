@@ -89,6 +89,10 @@ bool tab_pag_alterada(tab_pag_t *self, int pag)
   return self->tab[pag].alterada;
 }
 
+int tab_pag_num_pag(tab_pag_t* self)
+{
+  return self->num_pag;
+}
 
 
 // altera informação sobre uma página da tabela

@@ -57,7 +57,7 @@ void mem_altera(int pos, int val)
 void mem_imprime(void)
 {
   for (int i = 0; i < mem_pos; i+=10) {
-    printf("    /*%4d */", i);
+   // printf("    /*%4d */", i);
     for (int j = i; j < i+10 && j < mem_pos; j++) {
       printf(" %d,", mem[j]);
     }

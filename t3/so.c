@@ -4,6 +4,7 @@
 #include "tela.h"
 #include "rel.h"
 #include "processo.h"
+#include "pag_esc.h"
 
 struct so_t {
   contr_t *contr;       // o controlador do hardware
@@ -12,9 +13,9 @@ struct so_t {
   tabela_processos* tabela;
   int relCount; //número total de interrupções do sistema
   so_metricas* metricas;
+  pag_fila* pag_validas;
   char* quadros; //array de booleano que indica se um quadro está livre
 };
-
 
 //cria uma tabela nova tendo todas as paginas como inválidas
 tab_pag_t* cria_tabela(so_t* self, int tam)
@@ -81,40 +82,33 @@ void carrega_pronto(so_t* self)
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
-//todo: refatorar isso aqui pra salvar uma página pra dentro da memória de um processo(eu acho)
-void salva_memx(so_t* self, int* mem_copia)
-{
-  contr_t* contr = self->contr;
-  mem_t* mem = contr_mem(contr);
-  int tam = mem_tam(mem);
-  int valor;
-
-  for(int i = 0; i < tam; i++)
-  {
-    mem_le(mem, i, &valor);
-    mem_copia[i] = valor;
-  }
-}
-
+//me livrei daqueles #include "init.maq", mó feio.
 int* carrega_arquivo(const char* nome, int* tam)
 {
-  FILE* f = fopen(nome, "r");
-  fseek(f, 0, SEEK_END);
-  *tam = ftell(f) / sizeof(int) + 1;
-  t_printf(">>>>> %i", *tam);
-  rewind(f);
+  FILE* file = fopen(nome, "r");
 
-  int* vet = (int*)malloc(sizeof(int) * (*tam));
-  fread(vet, sizeof(int), *tam, f);
-
-  for(int i = 0; i < *tam; i++)
+  char c;
+  int i = 0;
+  while ((c = fgetc(file)) != EOF) 
   {
-    t_printf("%i ", vet[i]);
+    if (c == ',') 
+    {
+      i++;
+    }
   }
 
-  fclose(f);
+  int* vector = (int*) malloc((i + 1) * sizeof(int));
 
-  return vet;
+  rewind(file);
+  *tam = i;
+  i = 0;
+  while (fscanf(file, "%d,", &vector[i]) != EOF) 
+  {
+    i++;
+  }
+
+  fclose(file);
+  return vector;
 }
 
 int* carrega_programa(int program, int* tam_prog)
@@ -190,6 +184,7 @@ so_t *so_cria(contr_t *contr)
   self->relCount = 0;
   self->metricas = so_metricas_cria();
   self->tabela = pross_tabela_cria(self->metricas);
+  self->pag_validas = pag_fila_cria();
 
   int n_quadros = (int)(MEM_TAM / PAG_TAM + 1);
   self->quadros = (char*)malloc(sizeof(char) * n_quadros);
@@ -224,8 +219,8 @@ static void so_trata_sisop_le(so_t *self)
     processo* pross = pross_acha_exec(self->tabela);
 
     //salva_mem(self, pross_copia_memoria(pross));
-    pross_bloqueia(self->tabela, pross, pross_leitura, disp, self->relCount);
     pross_copia_cpue(pross, self->cpue);
+    pross_bloqueia(self->tabela, pross, pross_leitura, disp, self->relCount);
     carrega_pronto(self);
   }
   else
@@ -277,8 +272,8 @@ void so_trata_falha_pagina(so_t *self)
   int pag = mmu_ultimo_endereco(mmu) / PAG_TAM;
 
   processo* pross = pross_acha_exec(self->tabela);
-  pross_bloqueia(self->tabela, pross, pross_pagfalt, pag, self->relCount);
   pross_copia_cpue(pross, self->cpue);
+  pross_bloqueia(self->tabela, pross, pross_pagfalt, pag, self->relCount);
 
   //todo: fazer o que o Benhas pediu
   carrega_pronto(self);
@@ -287,20 +282,33 @@ void so_trata_falha_pagina(so_t *self)
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
-//retornar um quadro livre da memória(descarta uma página existente se não houver)
-int escalonador_paginas(so_t* self)
+//se não houver quadros livres, chama o escalonador
+int acha_quadro_livre(so_t* self)
 {
   int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
   for(int i = 0; i < num_quadros; i++)
   {
     if(self->quadros[i] == 0)
     {
+      self->quadros[i] = 1;
       return i;
     }
   }
 
-  t_printf("falha no escalonador");
-  return -1;
+  return pag_fila_escalonador(self->pag_validas, contr_mmu(self->contr));
+}
+
+void libera_quadros_tab(so_t* self, tab_pag_t* tab)
+{
+  int n_pags = tab_pag_num_pag(tab);
+  for(int pag = 0; pag < n_pags; pag++)
+  {
+    if(tab_pag_valida(tab, pag))
+    {
+      int n_quadro = tab_pag_quadro(tab, pag);
+      self->quadros[n_quadro] = 0;
+    }
+  }
 }
 
 // chamada de sistema para término do processo
@@ -309,6 +317,7 @@ static void so_trata_sisop_fim(so_t *self)
   t_printf("DEBUG: terminando processo");
 
   processo* pross = pross_acha_exec(self->tabela);
+  libera_quadros_tab(self, pross_tab_pag(pross));
   pross_altera_estado(self->tabela, pross, 0, self->relCount); //estado inválido
   pross_libera(self->tabela, pross);
 
@@ -354,9 +363,11 @@ bool desbloqueia_so_falha_pag(so_t* self, processo* pross, int pag)
 {
   mem_t* mem = contr_mem(self->contr);
   cpu_estado_t* cpue = pross_cpue(pross);
-  int quadro = escalonador_paginas(self);
+  int quadro = acha_quadro_livre(self);
   
   pross_carrega_pagina(pross, mem, pag, quadro);
+  pag_ptr* ptr = pag_ptr_cria(pross_tab_pag(pross), pag, pross_copia_memoria(pross));
+  pag_fila_insere(self->pag_validas, ptr);
 
   //volta no pc anterior para repetir o incremento da instrução
   cpue_muda_PC(cpue, cpue_PC(cpue) - 2);

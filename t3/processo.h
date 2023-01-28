@@ -33,6 +33,7 @@ void pross_libera(tabela_processos* tabela, processo* pross);
 
 void pross_altera_estado(tabela_processos* tabela, processo* pross, processo_estado estado, int relCount);
 
+tab_pag_t* pross_tab_pag(processo* pross);
 
 /// @brief carrega um pagina para dentro da memoria principal
 /// @param quadro quadro livre da memória aonde a pagina será carregada

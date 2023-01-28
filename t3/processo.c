@@ -97,6 +97,11 @@ void pross_usa_tabela(mmu_t* mmu, processo* pross)
     mmu_usa_tab_pag(mmu, pross->tab_pags);
 }
 
+tab_pag_t* pross_tab_pag(processo* pross)
+{
+    return pross->tab_pags;
+}
+
 void pross_carrega_pagina(processo* pross, mem_t* mem, int pag, int quadro)
 {
     tab_pag_muda_quadro(pross->tab_pags, pag, quadro);
