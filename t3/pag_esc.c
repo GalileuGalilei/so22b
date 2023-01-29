@@ -78,6 +78,7 @@ void pag_fila_libera(pag_fila* self, pag_ptr* ptr, mmu_t* mmu)
     if(self->first == ptr)
     {
         self->first = ptr->next;
+        tab_pag_muda_valida(ptr->tab_pag, ptr->pag, false);
         free(ptr);
         return;
     }
@@ -87,7 +88,7 @@ void pag_fila_libera(pag_fila* self, pag_ptr* ptr, mmu_t* mmu)
     
     if(self->last == ptr)
     {
-        self->last = ptr->next;
+        self->last = i;
     }
 
     i->next = ptr->next;
@@ -102,14 +103,20 @@ void pag_fila_libera_tabela(pag_fila* self, tab_pag_t* tab, mmu_t* mmu)
     {
         if(i->tab_pag == tab)
         {
-            i = anterior;
             pag_fila_libera(self, i, mmu);
 
-            if(i == NULL)
+            i = anterior;
+            if(anterior == NULL)
             {
                 i = self->first;
+
+                if(i == NULL)
+                {
+                    return;
+                }
             }
         }
+        anterior = i;
     }
 }
 
@@ -122,14 +129,10 @@ int pag_fila_escalonador(pag_fila* self, mmu_t* mmu)
         return -1;
     }
 
-    pag_ptr* anterior = NULL;
-    for (pag_ptr* i = self->first; i != NULL; i = i->next)
-    {
-        anterior = i;
-    }
+    pag_ptr* last = self->last;
     
-    int quadro = tab_pag_quadro(anterior->tab_pag, anterior->pag);
-    pag_fila_libera(self, anterior, mmu);
+    int quadro = tab_pag_quadro(last->tab_pag, last->pag);
+    pag_fila_libera(self, last, mmu);
 
     return quadro;
 }

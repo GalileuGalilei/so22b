@@ -272,7 +272,8 @@ void so_trata_falha_pagina(so_t *self)
   int pag = mmu_ultimo_endereco(mmu) / PAG_TAM;
 
   processo* pross = pross_acha_exec(self->tabela);
-  pross_copia_cpue(pross, self->cpue);
+  //pross_copia_cpue(pross, self->cpue);
+  exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
   pross_bloqueia(self->tabela, pross, pross_pagfalt, pag, self->relCount);
 
   //todo: fazer o que o Benhas pediu
@@ -362,9 +363,15 @@ bool desbloqueia_so_escr(so_t* self, cpu_estado_t* cpue)
 bool desbloqueia_so_falha_pag(so_t* self, processo* pross, int pag)
 {
   mem_t* mem = contr_mem(self->contr);
+  mmu_t* mmu = contr_mmu(self->contr);
   cpu_estado_t* cpue = pross_cpue(pross);
   int quadro = acha_quadro_livre(self);
   
+  if(quadro == -1)
+  {
+    quadro = pag_fila_escalonador(self->pag_validas, mmu);
+  }
+
   pross_carrega_pagina(pross, mem, pag, quadro);
   pag_ptr* ptr = pag_ptr_cria(pross_tab_pag(pross), pag, pross_copia_memoria(pross));
   pag_fila_insere(self->pag_validas, ptr);
