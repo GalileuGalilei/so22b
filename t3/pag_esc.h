@@ -21,6 +21,7 @@ void pag_fila_libera(pag_fila* self, pag_ptr* ptr, mmu_t* mmu);
 
 int pag_fila_escalonador(pag_fila* self, mmu_t* mmu);
 
+void pag_fila_libera_tabela(pag_fila* self, tab_pag_t* tab, mmu_t* mmu);
 
 
 #endif

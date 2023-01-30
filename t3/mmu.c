@@ -1,5 +1,6 @@
 #include "mmu.h"
 #include "tab_pag.h"
+#include "tela.h"
 #include <stdlib.h>
 
 // tipo de dados opaco para representar o controlador de memória
@@ -39,6 +40,7 @@ static err_t traduz_endereco(mmu_t *self, int end_v, int *end_f,
   self->ultimo_endereco = end_v;
   // se não tem tabela de páginas, não traduz
   if (self->tab_pag == NULL) {
+    t_printf("######## NENHUMA TABELA SELECIONADA ########");
     *end_f = end_v;
     return ERR_OK;
   }

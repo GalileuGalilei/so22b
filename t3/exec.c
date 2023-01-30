@@ -3,6 +3,7 @@
 
 #include "exec.h"
 #include "instr.h"
+#include "stdio.h"
 // uma CPU tem estado, gerenciador de memória, controlador de ES
 struct exec_t {
   cpu_estado_t *estado;
@@ -157,6 +158,17 @@ static void op_ARMM(exec_t *self) // armazena na memória
   if (pega_A1(self, &A1) && poe_mem(self, A1, cpue_A(self->estado))) {
     incrementa_PC2(self);
   }
+
+      FILE* f = fopen("DEBUGGERS.txt", "wr");
+
+    for(int i = 0; i < 40; i++)
+    {
+      int valor = 0;
+      mmu_le(self->mmu, i, &valor);
+      fprintf(f, ">> %i \n", valor);
+    }
+
+    fclose(f);
 }
 
 static void op_ARMX(exec_t *self) // armazena indexado

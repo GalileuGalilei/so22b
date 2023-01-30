@@ -63,29 +63,40 @@ void salva_pag(pag_ptr* ptr, int* mem_copia, mmu_t* mmu)
 
     for (int i = v_end; i < PAG_TAM + v_end; i++)
     {
-        mmu_le(mmu, i, &mem_copia[i]);
+        err_t err =  mmu_le(mmu, i, &mem_copia[i]);
+        if(err != ERR_OK)
+        {
+            t_printf("##########  ALGO DE MUITO ERRADO  ###########");
+        }
     }
 }
 
 void pag_fila_libera(pag_fila* self, pag_ptr* ptr, mmu_t* mmu)
 {
-    //salva o conteúdo da página na "memória secundário, caso ela tenha sido alterada"
-    if(tab_pag_alterada(ptr->tab_pag, ptr->pag))
+    //salva o conteúdo da página na "memória secundária", caso ela tenha sido alterada
+    if(true)//tab_pag_alterada(ptr->tab_pag, ptr->pag))
     {
         salva_pag(ptr, ptr->mem_copia, mmu);
     }
 
     if(self->first == ptr)
     {
+        if(self->last == self->first)
+        {
+            self->last = NULL;
+        }
+
         self->first = ptr->next;
+
         tab_pag_muda_valida(ptr->tab_pag, ptr->pag, false);
         free(ptr);
         return;
     }
 
     pag_ptr* i;
-    for(i = self->first; i->next != ptr; i = i->next) {}
-    
+    int count = 1;
+    for(i = self->first; i->next != ptr; i = i->next) {count++;}
+
     if(self->last == ptr)
     {
         self->last = i;
@@ -98,25 +109,18 @@ void pag_fila_libera(pag_fila* self, pag_ptr* ptr, mmu_t* mmu)
 
 void pag_fila_libera_tabela(pag_fila* self, tab_pag_t* tab, mmu_t* mmu)
 {
-    pag_ptr* anterior = NULL;
-    for (pag_ptr* i = self->first; i != NULL; i = i->next)
+    pag_ptr* aux = NULL;
+    for (pag_ptr* i = self->first; i != NULL;)
     {
         if(i->tab_pag == tab)
         {
+            aux = i->next;
             pag_fila_libera(self, i, mmu);
 
-            i = anterior;
-            if(anterior == NULL)
-            {
-                i = self->first;
-
-                if(i == NULL)
-                {
-                    return;
-                }
-            }
+            i = aux;
+            continue;
         }
-        anterior = i;
+        i = i->next;
     }
 }
 

@@ -1,6 +1,7 @@
 #include "tab_pag.h"
 #include <stdlib.h>
 #include <stdbool.h>
+#include "tela.h"
 
 typedef struct {
   bool valida;    // esta entrada é válida
@@ -63,6 +64,7 @@ err_t tab_pag_traduz(tab_pag_t *self, int end_v, int *pend_f, int *ppag, int *pd
   if (pend_f != NULL) {
     *pend_f = quadro * self->tam_pag + deslocamento;
   }
+
   return ERR_OK;
 }
 

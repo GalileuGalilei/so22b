@@ -7,3 +7,12 @@ tempo medio de retorno: 8
 numero de bloqueios: 1 
 numero de preempcoes: 2 
 
+** programa: 1 **
+tempo de retorno: 46 
+tempo bloqueado: 16 
+tempo executando: 29 
+tempo pronto: 1 
+tempo medio de retorno: 4 
+numero de bloqueios: 4 
+numero de preempcoes: 1 
+

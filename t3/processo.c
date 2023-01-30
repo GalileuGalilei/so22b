@@ -110,10 +110,21 @@ void pross_carrega_pagina(processo* pross, mem_t* mem, int pag, int quadro)
     int end_virt_pag = pag * PAG_TAM;
 
     int j = end_virt_pag;
+   // FILE* f = fopen("DEBUGGERS.txt", "wr");
     for(int i = end_real_pag; i < end_real_pag + PAG_TAM; i++, j++)
     {
-        mem_escreve(mem, i, pross->mem_copia[j]);
+        int valor = pross->mem_copia[j];
+
+        if(j > 32)
+        {
+            valor = -1;
+        }
+
+      //  fprintf(f, ">> %i - end_v: %i \n", valor, j);
+        mem_escreve(mem, i, valor);
     }
+
+   // fclose(f);
 }
 
 void pross_libera(tabela_processos* tabela, processo* pross)
