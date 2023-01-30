@@ -278,7 +278,7 @@ void so_trata_falha_pagina(so_t *self)
   //todo: fazer o que o Benhas pediu
   carrega_pronto(self);
 
-  cpue_muda_erro(self->cpue, ERR_OK, 0);
+  //cpue_muda_erro(self->cpue, ERR_OK, 0);
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
