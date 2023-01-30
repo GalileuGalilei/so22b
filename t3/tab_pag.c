@@ -1,6 +1,7 @@
 #include "tab_pag.h"
 #include <stdlib.h>
 #include <stdbool.h>
+#include "tela.h"
 
 typedef struct {
   bool valida;    // esta entrada é válida
@@ -23,7 +24,18 @@ tab_pag_t *tab_pag_cria(int num_pag, int tam_pag)
     self->num_pag = num_pag;
     self->tam_pag = tam_pag;
     // calloc zera a memória, os descritores terão 'false' em 'valida'
-    self->tab = calloc(num_pag, sizeof(descr_pag_t));
+    self->tab = (descr_pag_t*)malloc(sizeof(descr_pag_t) * num_pag);
+
+    for(int i = 0; i < num_pag; i++)
+    {
+      self->tab[i].acessada = 0;
+      self->tab[i].alterada = 0;
+      self->tab[i].quadro = 0;
+      self->tab[i].valida = 0;
+    }
+
+    //self->tab = calloc(num_pag, sizeof(descr_pag_t));
+
     if (self->tab == NULL) {
       free(self);
       return NULL;
@@ -63,6 +75,7 @@ err_t tab_pag_traduz(tab_pag_t *self, int end_v, int *pend_f, int *ppag, int *pd
   if (pend_f != NULL) {
     *pend_f = quadro * self->tam_pag + deslocamento;
   }
+
   return ERR_OK;
 }
 

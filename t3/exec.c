@@ -3,6 +3,8 @@
 
 #include "exec.h"
 #include "instr.h"
+#include "tela.h"
+#include "stdio.h"
 // uma CPU tem estado, gerenciador de memória, controlador de ES
 struct exec_t {
   cpu_estado_t *estado;
@@ -127,6 +129,7 @@ static void op_CARGI(exec_t *self) // carrega imediato
 {
   int A1;
   if (pega_A1(self, &A1)) {
+    t_printf("CARM valor %i", A1);
     cpue_muda_A(self->estado, A1);
     incrementa_PC2(self);
   }
@@ -135,7 +138,7 @@ static void op_CARGI(exec_t *self) // carrega imediato
 static void op_CARGM(exec_t *self) // carrega da memória
 {
   int A1, mA1;
-  if (pega_A1(self, &A1) && pega_mem(self, A1, &mA1)) {
+  if (pega_A1(self, &A1) && pega_mem(self, A1, &mA1) && t_printf("CARM valor %i no endereco %i", mA1, A1) != 999) {
     cpue_muda_A(self->estado, mA1);
     incrementa_PC2(self);
   }
@@ -145,7 +148,7 @@ static void op_CARGX(exec_t *self) // carrega indexado
 {
   int A1, mA1mX;
   int X = cpue_X(self->estado);
-  if (pega_A1(self, &A1) && pega_mem(self, A1+X, &mA1mX)) {
+  if (pega_A1(self, &A1) && pega_mem(self, A1+X, &mA1mX) && t_printf("CARM valor %i no endereco %i", mA1mX, A1) != 999) {
     cpue_muda_A(self->estado, mA1mX);
     incrementa_PC2(self);
   }

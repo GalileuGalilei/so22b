@@ -1,5 +1,6 @@
 #include "mmu.h"
 #include "tab_pag.h"
+#include "tela.h"
 #include <stdlib.h>
 
 // tipo de dados opaco para representar o controlador de memória
@@ -30,6 +31,11 @@ void mmu_destroi(mmu_t *self)
 void mmu_usa_tab_pag(mmu_t *self, tab_pag_t *tab_pag)
 {
   self->tab_pag = tab_pag;
+}
+
+tab_pag_t* mmu_tab_atual(mmu_t* self)
+{
+  return self->tab_pag;
 }
 
 // função auxiliar, traduz um endereço virtual em físico

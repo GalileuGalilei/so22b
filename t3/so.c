@@ -21,25 +21,15 @@ struct so_t {
 tab_pag_t* cria_tabela(so_t* self, int tam)
 {
   int num_pag = (int)(tam / PAG_TAM + 1);
-  //int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
   tab_pag_t* tab = tab_pag_cria(num_pag, PAG_TAM);
 
   int i;
   for(i = 0; i < num_pag; i++)
   {
-    //todas as páginas começam como inválidas
     tab_pag_muda_valida(tab, i, false);
-
-    //self->quadros[i] = 1;
   }
 
   t_printf("DEBUG: criando tabela de tam %i de %i paginas", tam, num_pag);
-  /*
-  for(int i = 0; i < num_pag; i++)
-  {
-    carrega_pagina(self, tab, i, programa + i * PAG_TAM);
-  }
-  */
   return tab;
 }
 
@@ -145,6 +135,16 @@ static void so_trata_sisop_cria(so_t *self)
   int programa = cpue_A(self->cpue);
   int tam_prog;
   int* prog = carrega_programa(programa, &tam_prog);
+/*
+  FILE* f = fopen("DEBUGGERS.txt", "wr");
+
+  for(int i = 0; i < tam_prog; i++)
+  {
+    fprintf(f, ">> %i \n", prog[i]);
+  }
+
+  fclose(f);
+*/
   tab_pag_t* tab = cria_tabela(self, tam_prog);
 
   t_printf("programa %i de tamanho %i", programa, tam_prog);
@@ -186,7 +186,7 @@ so_t *so_cria(contr_t *contr)
   self->tabela = pross_tabela_cria(self->metricas);
   self->pag_validas = pag_fila_cria();
 
-  int n_quadros = (int)(MEM_TAM / PAG_TAM + 1);
+  int n_quadros = (int)(MEM_TAM / PAG_TAM);
   self->quadros = (char*)malloc(sizeof(char) * n_quadros);
 
   for(int i = 0; i < n_quadros; i++)
@@ -263,29 +263,31 @@ static void so_trata_sisop_escr(so_t *self)
   // interrupção da cpu foi atendida
   cpue_muda_erro(self->cpue, ERR_OK, 0);
   exec_altera_estado(contr_exec(self->contr), self->cpue);
-  //só incrementa o PC, se não houver trocas de processos ??? ?????
 }
 
 void so_trata_falha_pagina(so_t *self)
 {
   mmu_t* mmu = contr_mmu(self->contr);
-  int pag = mmu_ultimo_endereco(mmu) / PAG_TAM;
+  int end = mmu_ultimo_endereco(mmu);
+  int pag = end / PAG_TAM;
 
+  t_printf(">> bloqueio por falha na pagina %i no endereco %i", pag, end);
   processo* pross = pross_acha_exec(self->tabela);
-  pross_copia_cpue(pross, self->cpue);
+  //pross_copia_cpue(pross, self->cpue);
+  exec_copia_estado(contr_exec(self->contr), pross_cpue(pross));
   pross_bloqueia(self->tabela, pross, pross_pagfalt, pag, self->relCount);
 
   //todo: fazer o que o Benhas pediu
   carrega_pronto(self);
 
-  //cpue_muda_erro(self->cpue, ERR_OK, 0);
+  cpue_muda_erro(self->cpue, ERR_OK, 0);
   exec_altera_estado(contr_exec(self->contr), self->cpue);
 }
 
 //se não houver quadros livres, chama o escalonador
 int acha_quadro_livre(so_t* self)
 {
-  int num_quadros = (int)(MEM_TAM / PAG_TAM + 1);
+  int num_quadros = (int)(MEM_TAM / PAG_TAM);
   for(int i = 0; i < num_quadros; i++)
   {
     if(self->quadros[i] == 0)
@@ -295,7 +297,7 @@ int acha_quadro_livre(so_t* self)
     }
   }
 
-  return pag_fila_escalonador(self->pag_validas, contr_mmu(self->contr));
+  return -1;
 }
 
 void libera_quadros_tab(so_t* self, tab_pag_t* tab)
@@ -318,6 +320,8 @@ static void so_trata_sisop_fim(so_t *self)
 
   processo* pross = pross_acha_exec(self->tabela);
   libera_quadros_tab(self, pross_tab_pag(pross));
+  pag_fila_libera_tabela(self->pag_validas, pross_tab_pag(pross), contr_mmu(self->contr));
+
   pross_altera_estado(self->tabela, pross, 0, self->relCount); //estado inválido
   pross_libera(self->tabela, pross);
 
@@ -362,16 +366,28 @@ bool desbloqueia_so_escr(so_t* self, cpu_estado_t* cpue)
 bool desbloqueia_so_falha_pag(so_t* self, processo* pross, int pag)
 {
   mem_t* mem = contr_mem(self->contr);
-  cpu_estado_t* cpue = pross_cpue(pross);
+  mmu_t* mmu = contr_mmu(self->contr);
+  //cpu_estado_t* cpue = pross_cpue(pross);
   int quadro = acha_quadro_livre(self);
   
+  if(quadro == -1 && pross_acha_exec(self->tabela) != NULL)
+  {
+    return false;
+  }
+
+  if(quadro == -1)
+  {
+    quadro = pag_fila_escalonador(self->pag_validas, mmu);
+  }
+
+  t_printf(">> pagina %i carregada no quadro %i", pag, quadro);
   pross_carrega_pagina(pross, mem, pag, quadro);
+
   pag_ptr* ptr = pag_ptr_cria(pross_tab_pag(pross), pag, pross_copia_memoria(pross));
   pag_fila_insere(self->pag_validas, ptr);
 
-  //volta no pc anterior para repetir o incremento da instrução
-  cpue_muda_PC(cpue, cpue_PC(cpue) - 2);
-  cpue_muda_A(cpue, ERR_OK);
+  //volta no pc anterior para repetir o incremento da instrução, edit:(voltava, n volta mais)
+ // cpue_muda_A(cpue, ERR_OK);
   return true;
 }
 
@@ -382,6 +398,7 @@ void desbloqueia_processo(so_t* self, processo* pross)
     pross_bloqueio motivo = pross_motivo_bloqueio(pross, &complemento);
     cpu_estado_t* cpue = pross_cpue(pross);
     bool alterado = false;
+    bool incrementa = true;
 
     switch (motivo)
     {
@@ -395,6 +412,7 @@ void desbloqueia_processo(so_t* self, processo* pross)
     
     case pross_pagfalt:
       alterado = desbloqueia_so_falha_pag(self, pross, complemento);
+      incrementa = false;
       break;
 
     default:
@@ -405,7 +423,10 @@ void desbloqueia_processo(so_t* self, processo* pross)
     if(alterado)
     {
       pross_altera_estado(self->tabela, pross, pronto, self->relCount);
-      cpue_muda_PC(cpue, cpue_PC(cpue) + 2);
+      if(incrementa)
+      {
+        cpue_muda_PC(cpue, cpue_PC(cpue) + 2);
+      }
       t_printf("DEBUG: processo desbloqueado");
     }
 }
@@ -414,6 +435,7 @@ void desbloqueia_processo(so_t* self, processo* pross)
 static void so_trata_tic(so_t *self)
 {
     t_printf("DEBUG: chamada de relogio");
+    reseta_bit_acessado(self->pag_validas);
     processo* pross = pross_acha_exec(self->tabela);
 
     if(pross != NULL)

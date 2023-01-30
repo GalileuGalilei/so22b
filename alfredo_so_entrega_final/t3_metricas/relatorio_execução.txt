@@ -1,0 +1,13 @@
+Os quatro arquivos na pasta representam as metricas do so executando os programas init, p1 e p2.
+
+Como a soma das memórias do p1 e do p2 totalizam 74, o so foi testado usando o tamanho da memória 
+igual a 32(1/2 do total) e igual a 15(1/5 do total), respectivamente com paginas de tamanho 4 e 3.
+Naturalmente, a execução com 32 de memória foi muito mais rápida.
+
+O escalonador NRU se mostrou levemente superior ao Fifo em ambos os cenários. Como os dois escalonadores
+possuem um funcionamento simples(mas com eficiência razoável), era de se esperar uma diferença pequena.
+
+
+
+
+Obs: o escalonador NRU foi feito com base na descrição do livro.

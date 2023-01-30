@@ -50,4 +50,7 @@ err_t mmu_escreve(mmu_t *self, int endereco, int valor);
 // função usada pelo SO para obter o endereço que causou falha de página
 int mmu_ultimo_endereco(mmu_t *self);
 
+//retorna a tabela de páginas que está sendo atualmente usada
+tab_pag_t* mmu_tab_atual(mmu_t* self);
+
 #endif // MMU_H

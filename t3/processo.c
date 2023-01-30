@@ -112,14 +112,25 @@ void pross_carrega_pagina(processo* pross, mem_t* mem, int pag, int quadro)
     int j = end_virt_pag;
     for(int i = end_real_pag; i < end_real_pag + PAG_TAM; i++, j++)
     {
-        mem_escreve(mem, i, pross->mem_copia[j]);
+        int valor = pross->mem_copia[j];
+
+        if(j > 32)
+        {
+            valor = -1;
+        }
+
+        mem_escreve(mem, i, valor);
     }
+
 }
 
 void pross_libera(tabela_processos* tabela, processo* pross)
 {
     pross_log_metricas(pross->metricas, pross->n_programa);
-    tab_pag_destroi(pross->tab_pags);
+
+    //a liberação da memória da tabela estava causando erros no windows, então deixei comentado;
+    //tab_pag_destroi(pross->tab_pags);
+
     free(pross->mem_copia);
     free(pross->cpue);
     free(pross->metricas);
@@ -148,14 +159,7 @@ void pross_libera(tabela_processos* tabela, processo* pross)
     free(pross);
 }
 
-//reseta o bit de escrita e acesso de todas as páginas \\ pra qq eu ia usar isso mesmo?
-void reseta_bit_pags()
-{
-    
-}
-//*****escalonadores*******]
-
-
+//*****escalonadores*******
 
 processo* round_robin(tabela_processos* tabela)
 {

@@ -1,0 +1,31 @@
+** programa: 0 **
+tempo de retorno: 30 
+tempo bloqueado: 15 
+tempo executando: 6 
+tempo pronto: 9 
+tempo medio de retorno: 5 
+numero de bloqueios: 3 
+numero de preempcoes: 2 
+
+** programa: 1 **
+tempo de retorno: 122 
+tempo bloqueado: 53 
+tempo executando: 42 
+tempo pronto: 27 
+tempo medio de retorno: 3 
+numero de bloqueios: 15 
+numero de preempcoes: 0 
+
+** programa: 2 **
+tempo de retorno: 116 
+tempo bloqueado: 88 
+tempo executando: 28 
+tempo pronto: 0 
+tempo medio de retorno: 5 
+numero de bloqueios: 15 
+numero de preempcoes: 0 
+
+** metricas gerais **
+numero de chamadas de sistema: 11 
+tempo total: 136 
+tempo no modo zumbi: 60 
